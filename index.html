@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Purple Onion — Kitchen Requests</title>
+<base target="_top">
+<style>
+  :root { --plum:#7B5B7E; --sage:#E2EBDA; --line:#d8d4d0; --ink:#231f20; --warn:#B71C1C; --good:#2E7D32; --muted:#6b6560; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:0 0 3rem; font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:#faf9f8; }
+  header { background:var(--plum); color:#fff; padding:1.1rem 1.2rem; }
+  header h1 { margin:0; font-size:1.15rem; font-weight:600; }
+  header p  { margin:.35rem 0 0; font-size:.85rem; opacity:.9; }
+  .wrap { max-width:1000px; margin:0 auto; padding:1.2rem; display:grid; gap:1.2rem; grid-template-columns:minmax(0,1fr); align-items:start; }
+  @media (min-width:1024px) { .wrap { grid-template-columns:minmax(0,1fr) 290px; } }
+  fieldset { border:1px solid var(--line); border-radius:6px; background:#fff; margin:0 0 1.1rem; padding:1rem; }
+  legend { font-weight:600; padding:0 .4rem; font-size:.95rem; }
+  label { display:block; margin:.9rem 0 .3rem; font-weight:500; font-size:.92rem; }
+  .req::after { content:" *"; color:var(--warn); }
+  input[type=text], input:not([type]), input[type=email], input[type=date], input[type=number], select {
+    width:100%; padding:.6rem; border:1px solid var(--line); border-radius:4px; font:inherit; background:#fff; }
+  .hint { font-size:.8rem; color:var(--muted); margin:.25rem 0 0; }
+  .choices label, .checks label, label.inline { font-weight:400; margin:.4rem 0; display:flex; gap:.55rem; align-items:flex-start; }
+  .choices input, .checks input, label.inline input { margin-top:.3rem; flex:none; }
+  .types label { border:1px solid var(--line); border-radius:5px; padding:.55rem .7rem; }
+  .types small { display:block; color:var(--muted); font-size:.8rem; }
+  .checks.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); column-gap:.8rem; }
+  .pair { display:grid; grid-template-columns:1fr 1fr; gap:.8rem; }
+  .reveal { display:none; margin:.5rem 0 0; padding:.7rem; background:#FFF8E1; border-left:3px solid #E6A700; border-radius:0 4px 4px 0; }
+  .reveal.on { display:block; }
+  .reveal > label:first-child { margin-top:0; }
+  .roleonly { display:none; }
+  .roleonly.on { display:block; }
+  .item { border:1px solid var(--line); border-left:4px solid var(--plum); border-radius:5px; padding:.9rem; margin-bottom:.9rem; background:var(--sage); }
+  .item h3 { margin:0 0 .2rem; font-size:.85rem; text-transform:uppercase; letter-spacing:.04em; }
+  .item .inner { background:#fff; border-radius:4px; padding:.8rem; margin-top:.6rem; }
+  .item .inner > label:first-child, .item .inner > .pair:first-child label { margin-top:0; }
+  button { font:inherit; border-radius:5px; cursor:pointer; padding:.7rem 1.1rem; border:1px solid var(--plum); }
+  .add { background:#fff; color:var(--plum); font-weight:600; width:100%; }
+  .btnrow { display:grid; grid-template-columns:1fr 1fr; gap:.6rem; }
+  .rm { background:none; border:none; color:var(--warn); font-size:.82rem; padding:.2rem 0; text-decoration:underline; }
+  .send { background:var(--plum); color:#fff; font-weight:600; font-size:1.05rem; width:100%; padding:.9rem; margin-top:.6rem; }
+  .send[disabled] { opacity:.55; cursor:progress; }
+  #msg { padding:.9rem; border-radius:5px; margin-top:1rem; display:none; font-size:.92rem; }
+  #msg.ok  { display:block; background:#E8F5E9; border:1px solid var(--good); color:#1B5E20; }
+  #msg.err { display:block; background:#FFEBEE; border:1px solid var(--warn); color:#7f1414; }
+  #again { display:none; margin-top:.8rem; }
+  aside { font-size:.85rem; }
+  @media (min-width:1024px) { aside { position:sticky; top:1rem; } }
+  @media (max-width:1023px) { aside { order:-1; } }
+  .guide { background:#fff; border:1px solid var(--line); border-top:3px solid var(--plum); border-radius:6px; padding:.9rem 1rem; }
+  .guide h4 { margin:0 0 .5rem; font-size:.8rem; text-transform:uppercase; letter-spacing:.05em; color:var(--plum); }
+  .guide ul { margin:0; padding-left:1.1rem; color:var(--muted); }
+  .guide li { margin:.3rem 0; }
+  .ex { margin-top:.6rem; padding-top:.6rem; border-top:1px dashed var(--line); line-height:1.45; }
+  .ex .y { color:var(--good); display:block; } .ex .n { color:var(--warn); display:block; }
+  .test { background:#FFF8E1; border:1px solid #E6A700; border-radius:5px; padding:.5rem .8rem; margin:0 0 1rem; font-size:.85rem; display:none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Purple Onion — Kitchen Requests</h1>
+  <p>Event changes, dietary questions and custom menus. It goes straight to the kitchen, and replies come to your email.</p>
+</header>
+
+<div class="wrap">
+<main>
+  <div class="test" id="testBanner">Test mode: requests are emailed only to the form's owner, not the kitchen.</div>
+  <form id="f" onsubmit="return false;">
+
+    <fieldset id="s-who">
+      <legend>The request</legend>
+      <label class="req">Your name</label>
+      <select id="who" onchange="whoToggle()"><option value="">Loading…</option></select>
+      <div class="reveal" id="whoOtherWrap">
+        <label class="req">Name</label><input id="whoName">
+        <label class="req">Email</label><input type="email" id="whoEmail" placeholder="name@purpleonioncatering.com">
+      </div>
+
+      <label class="req">What do you need?</label>
+      <div class="choices types">
+        <label><input type="radio" name="type" value="change" onchange="setType()"><span>Event change<small>Guest count, item quantities, adding or removing items</small></span></label>
+        <label><input type="radio" name="type" value="dietary" onchange="setType()"><span>Dietary question<small>Guests with allergies or restrictions on a booked event</small></span></label>
+        <label><input type="radio" name="type" value="custom" onchange="setType()"><span>Custom menu request<small>Something that isn't on our menu</small></span></label>
+      </div>
+
+      <label class="req" id="evLabel">Event number</label>
+      <input id="eventNumber" inputmode="numeric" maxlength="5" placeholder="65292">
+      <p class="hint">The 5-digit invoice number.</p>
+      <div class="roleonly" id="notBookedWrap">
+        <label class="inline"><input type="checkbox" id="notBooked" onchange="nbToggle()">Not booked yet</label>
+      </div>
+      <label class="req" id="dateLabel">Event date</label>
+      <input type="date" id="eventDate">
+      <label id="nameLabel">Event name</label>
+      <input id="eventName" maxlength="120" placeholder="Smith wedding">
+    </fieldset>
+
+    <!-- ============ EVENT CHANGE ============ -->
+    <fieldset class="roleonly" id="s-change">
+      <legend>Event change</legend>
+      <label class="req">What's changing?</label>
+      <div class="checks" id="chWhat">
+        <label><input type="checkbox" value="Guest count" onchange="chToggle()">Guest count</label>
+        <label><input type="checkbox" value="Item quantities" onchange="chToggle()">Item quantities</label>
+        <label><input type="checkbox" value="Adding items" onchange="chToggle()">Adding items</label>
+        <label><input type="checkbox" value="Removing items" onchange="chToggle()">Removing items</label>
+        <label><input type="checkbox" value="Other" onchange="chToggle()">Something else</label>
+      </div>
+
+      <div class="reveal" id="countWrap">
+        <div class="pair">
+          <div><label class="req">Guest count before</label><input type="number" id="countBefore" min="0"></div>
+          <div><label class="req">Guest count after</label><input type="number" id="countAfter" min="0"></div>
+        </div>
+        <label class="inline"><input type="checkbox" id="allScale" onchange="chToggle()">All menu items scale with the new count</label>
+        <p class="hint">If only some items change, leave this off and list those items below.</p>
+      </div>
+
+      <div class="reveal" id="itemsWrap">
+        <label>Item lines</label>
+        <p class="hint" style="margin-top:0">One line per item, named as it reads on the menu. Before and after for every quantity.</p>
+        <div id="chItems"></div>
+        <button type="button" class="add" onclick="addRow('tplCh','chItems')">+ Add an item</button>
+      </div>
+
+      <div class="reveal" id="chOtherWrap">
+        <label class="req">What else is changing?</label>
+        <input id="chOther" maxlength="300">
+      </div>
+
+      <label class="req">Is the change already made in TPP?</label>
+      <div class="choices">
+        <label><input type="radio" name="made" value="No" onchange="madeToggle()">No — asking for approval first</label>
+        <label><input type="radio" name="made" value="Yes" onchange="madeToggle()">Yes — already made</label>
+      </div>
+      <div class="reveal" id="madeWrap">
+        <label class="req">Who in the kitchen approved it?</label>
+        <select id="approvedBy"><option value="">Choose…</option></select>
+      </div>
+
+      <label>Anything else the kitchen should know?</label>
+      <input id="chNotes" maxlength="300">
+    </fieldset>
+
+    <!-- ============ DIETARY ============ -->
+    <fieldset class="roleonly" id="s-dietary">
+      <legend>Dietary question</legend>
+      <p class="hint" style="margin-top:0">One block per guest. "Copy last guest" repeats the restrictions, so several guests with the same need are quick.</p>
+      <div id="guests"></div>
+      <div class="btnrow">
+        <button type="button" class="add" onclick="addRow('tplGuest','guests')">+ Add a guest</button>
+        <button type="button" class="add" onclick="copyGuest()">Copy last guest</button>
+      </div>
+
+      <label class="req">Which courses should the kitchen check?</label>
+      <div class="choices">
+        <label><input type="radio" name="courses" value="All courses" onchange="coToggle()">All courses</label>
+        <label><input type="radio" name="courses" value="Only some" onchange="coToggle()">Only some</label>
+      </div>
+      <div class="reveal" id="coWrap">
+        <label class="req">Which ones?</label>
+        <input id="coursesText" maxlength="200" placeholder="Salad and entree">
+      </div>
+    </fieldset>
+
+    <!-- ============ CUSTOM MENU ============ -->
+    <fieldset class="roleonly" id="s-custom">
+      <legend>Custom menu request</legend>
+      <label class="req">What do you need from culinary?</label>
+      <div class="checks" id="cuNeeds">
+        <label><input type="checkbox" value="Price it">Price it</label>
+        <label><input type="checkbox" value="Create it">Create it — a new dish</label>
+        <label><input type="checkbox" value="Approve it">Approve it — can we do this?</label>
+        <label><input type="checkbox" value="Ideas">Ideas / suggestions</label>
+      </div>
+
+      <div class="pair">
+        <div><label class="req">Guest count</label><input type="number" id="cuCount" min="1"></div>
+        <div><label class="req">Service style</label>
+          <select id="cuStyle"><option value="">Choose…</option><option>Plated</option><option>Buffet</option>
+            <option>Stations</option><option>Family style</option><option>Passed / cocktail</option>
+            <option>Displayed</option><option>Mixed</option></select></div>
+      </div>
+
+      <label class="req">Budget per person</label>
+      <div class="pair">
+        <div><input type="number" id="cuBudget" min="0" step="0.5" placeholder="$ per person"></div>
+        <div><label class="inline"><input type="checkbox" id="cuNoBudget" onchange="budgetToggle()">Not set yet</label></div>
+      </div>
+
+      <label>Client needs an answer by</label>
+      <input type="date" id="cuNeededBy">
+      <label>Client context</label>
+      <input id="cuContext" maxlength="300" placeholder="Theme, who the client is, anything that shapes the menu">
+
+      <label class="req">Requested items</label>
+      <div id="cuItems"></div>
+      <button type="button" class="add" onclick="addRow('tplCu','cuItems')">+ Add an item</button>
+    </fieldset>
+
+    <fieldset class="roleonly" id="s-files">
+      <legend>Attachments (optional)</legend>
+      <input type="file" id="files" multiple accept="image/*,application/pdf">
+      <p class="hint">Up to 3 files, 5 MB each. They go along with the email, but the kitchen works from your answers above.</p>
+    </fieldset>
+
+    <button type="button" class="send" id="send" onclick="submitForm()">Send to the kitchen</button>
+  </form>
+  <div id="msg"></div>
+  <button type="button" class="add" id="again" onclick="location.reload()">Send another request</button>
+</main>
+
+<aside>
+  <div class="guide" id="guide"></div>
+</aside>
+</div>
+
+<!-- ============ TEMPLATES ============ -->
+<template id="tplCh">
+  <div class="item">
+    <h3>Item <span class="n"></span></h3>
+    <button type="button" class="rm" onclick="rm(this)">remove</button>
+    <div class="inner">
+      <label class="req">Change</label>
+      <select class="cAction" onchange="actToggle(this)"><option value="">Choose…</option>
+        <option>Change quantity</option><option>Add</option><option>Remove</option></select>
+      <label class="req">Menu item</label>
+      <input class="cItem" maxlength="150" placeholder="Exactly as it reads on the menu">
+      <div class="pair">
+        <div><label class="qb">Qty before</label><input type="number" class="cBefore" min="0"></div>
+        <div><label class="qa">Qty after</label><input type="number" class="cAfter" min="0"></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="tplGuest">
+  <div class="item">
+    <h3>Guest <span class="n"></span></h3>
+    <button type="button" class="rm" onclick="rm(this)">remove</button>
+    <div class="inner">
+      <div class="pair">
+        <div><label class="req">Table</label><input class="gTable" maxlength="20" placeholder="7, or buffet"></div>
+        <div><label class="req">Guest name</label><input class="gName" maxlength="80"></div>
+      </div>
+      <label>Entree / meal</label>
+      <input class="gEntree" maxlength="100" placeholder="If plated: the entree they chose">
+      <label class="req">Restrictions</label>
+      <div class="checks grid gRes">
+        <label><input type="checkbox" value="Gluten">Gluten</label>
+        <label><input type="checkbox" value="Dairy">Dairy</label>
+        <label><input type="checkbox" value="Egg">Egg</label>
+        <label><input type="checkbox" value="Shellfish">Shellfish</label>
+        <label><input type="checkbox" value="Fish">Fish</label>
+        <label><input type="checkbox" value="Tree nuts">Tree nuts</label>
+        <label><input type="checkbox" value="Peanuts">Peanuts</label>
+        <label><input type="checkbox" value="Sesame">Sesame</label>
+        <label><input type="checkbox" value="Soy">Soy</label>
+        <label><input type="checkbox" value="Garlic / onion">Garlic / onion</label>
+        <label><input type="checkbox" value="Mushroom">Mushroom</label>
+        <label><input type="checkbox" value="Pork">Pork</label>
+        <label><input type="checkbox" value="Vegetarian">Vegetarian</label>
+        <label><input type="checkbox" value="Vegan">Vegan</label>
+        <label><input type="checkbox" value="Other" onchange="gOtherToggle(this)">Other</label>
+      </div>
+      <div class="reveal gOtherWrap">
+        <label class="req">In plain words, what can't they have?</label>
+        <input class="gOther" maxlength="150" placeholder="Name it: black pepper, chili, cinnamon — not just &quot;spice&quot;">
+      </div>
+      <label class="req">How serious is it?</label>
+      <select class="gSev"><option value="">Choose…</option><option>Preference</option><option>Intolerance</option>
+        <option>Allergy</option><option>Severe allergy (EpiPen)</option></select>
+      <label>Notes</label>
+      <input class="gNotes" maxlength="200">
+    </div>
+  </div>
+</template>
+
+<template id="tplCu">
+  <div class="item">
+    <h3>Item <span class="n"></span></h3>
+    <button type="button" class="rm" onclick="rm(this)">remove</button>
+    <div class="inner">
+      <label class="req">Course / role</label>
+      <select class="uRole"><option value="">Choose…</option><option>Passed app</option><option>Displayed app</option>
+        <option>Salad</option><option>Entree</option><option>Side</option><option>Station</option><option>Dessert</option>
+        <option>Late night</option><option>Beverage</option><option>Other</option></select>
+      <label class="req">What the client asked for</label>
+      <input class="uAsked" maxlength="250" placeholder="In the client's words, plus anything they said about it">
+      <div class="pair">
+        <div><label>Quantity</label><input class="uQty" maxlength="40" placeholder="150, or 2 per guest"></div>
+        <div><label>Close match on our menu</label><input class="uMatch" maxlength="120" placeholder="If you spotted one"></div>
+      </div>
+      <label>Dietary needs for this item</label>
+      <input class="uDiet" maxlength="120">
+    </div>
+  </div>
+</template>
+
+<script>
+// Standalone copy (GitHub Pages): reports go out as a cookie-less POST, which a browser signed into several
+// Google accounts cannot break. On the Apps Script page itself, google.script.run is used instead.
+var ENDPOINT = 'https://script.google.com/macros/s/AKfycbzp62RcpeZempmUyGH8jq0U2Y8pBzQpwwnHnhYwL2Rn2NFG5p2lmo3oX37ORu7lr8EI/exec';
+var TEST = /[?&]test=1\b/.test(location.search);
+var LISTS = { requesters: [], approvers: [] };
+
+var GUIDES = {
+  none: { tips: ['Pick the request type first — the form asks only what that request needs.',
+                 'It goes straight to the kitchen, with you copied. Replies come to your email.'], good: '', weak: '' },
+  change: { tips: ['Before and after for every number.', 'If only some items change, list each one.',
+                   'If it is already in TPP, name who in the kitchen approved it.'],
+            good: 'Count 60 → 85, all items scale. Already made, approved by Tyrone.',
+            weak: 'Increased food quantities, approved by [Manager Name].' },
+  dietary: { tips: ['One block per guest, with table and entree.', 'Say how serious it is — a preference and an EpiPen are different kitchens.',
+                    '"Spice" is not a restriction. Name the ingredient.'],
+             good: 'Table 7 · guest name · salmon · shellfish · severe allergy (EpiPen)',
+             weak: 'Four GF guests plus a mushroom allergy.' },
+  custom: { tips: ['Say what you need: a price, a new dish, an approval, or ideas.',
+                   'Give every item its course, and whether it is passed or displayed.', 'Budget per person, or say it is not set.'],
+            good: 'Price it: 3 passed apps for 150 guests, $12 a person.',
+            weak: '40-item sample menu, budget to be discussed.' }
+};
+
+/* ---------------- plumbing ---------------- */
+function $(id) { return document.getElementById(id); }
+function val(id) { return ($(id).value || '').trim(); }
+function radio(n) { var el = document.querySelector('input[name="' + n + '"]:checked'); return el ? el.value : ''; }
+function checked(sel) { return [].slice.call(document.querySelectorAll(sel + ' input:checked')).map(function (c) { return c.value; }); }
+function show(id, on) { $(id).classList.toggle('on', !!on); }
+function msg(kind, text) { var m = $('msg'); m.className = kind; m.textContent = text; m.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+function hasRun() { return !!(window.google && google.script && google.script.run); }
+
+function call(fnName, arg, done, fail) {
+  if (hasRun()) { var r = google.script.run.withSuccessHandler(done).withFailureHandler(fail); r[fnName](arg); return; }
+  var req = fnName === 'getLists'
+    ? fetch(ENDPOINT + '?action=lists', { credentials: 'omit' })
+    : fetch(ENDPOINT, { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(arg) });
+  req.then(function (r) { if (!r.ok) throw new Error('the server returned ' + r.status); return r.json(); }).then(done, fail);
+}
+
+/* ---------------- pick-lists ---------------- */
+function fillLists(res) {
+  LISTS = res && res.ok ? res : LISTS;
+  if (res && res.live === false) $('testBanner').style.display = 'block';
+  var who = $('who');
+  who.innerHTML = '<option value="">Choose…</option>' + LISTS.requesters.map(function (r, i) {
+    return '<option value="' + i + '">' + r.name + '</option>'; }).join('') + '<option value="other">Someone else</option>';
+  $('approvedBy').innerHTML = '<option value="">Choose…</option>' + LISTS.approvers.map(function (a) {
+    return '<option>' + a + '</option>'; }).join('');
+}
+function listsFailed() {
+  $('who').innerHTML = '<option value="other" selected>Type your name and email</option>';
+  whoToggle();
+  $('approvedBy').outerHTML = '<input id="approvedBy" maxlength="60" placeholder="Name of the kitchen approver">';
+}
+function whoToggle() { show('whoOtherWrap', $('who').value === 'other'); }
+function requester() {
+  var v = $('who').value;
+  if (v === 'other') return { name: val('whoName'), email: val('whoEmail') };
+  var r = /^[0-9]+$/.test(v) ? LISTS.requesters[+v] : null;   // '' must not become index 0
+  return r ? { name: r.name, email: r.email } : { name: '', email: '' };
+}
+
+/* ---------------- type branching + reveals ---------------- */
+function setType() {
+  var t = radio('type');
+  ['change', 'dietary', 'custom', 'files'].forEach(function (k) { show('s-' + k, k === 'files' ? !!t : t === k); });
+  show('notBookedWrap', t === 'custom');
+  if (t !== 'custom') $('notBooked').checked = false;
+  if (t === 'dietary' && !$('guests').children.length) addRow('tplGuest', 'guests');
+  if (t === 'custom' && !$('cuItems').children.length) addRow('tplCu', 'cuItems');
+  nbToggle(); renderGuide(t || 'none');
+}
+function nbToggle() {
+  var nb = $('notBooked').checked;
+  $('eventNumber').disabled = nb; if (nb) $('eventNumber').value = '';
+  $('evLabel').classList.toggle('req', !nb);
+  $('dateLabel').classList.toggle('req', !nb);
+  $('nameLabel').classList.toggle('req', nb);
+  $('nameLabel').textContent = nb ? 'Client / event name' : 'Event name';
+}
+function chToggle() {
+  var w = checked('#chWhat');
+  show('countWrap', w.indexOf('Guest count') !== -1);
+  show('chOtherWrap', w.indexOf('Other') !== -1);
+  var needItems = w.indexOf('Item quantities') !== -1 || w.indexOf('Adding items') !== -1 || w.indexOf('Removing items') !== -1 ||
+                  (w.indexOf('Guest count') !== -1 && !$('allScale').checked);
+  show('itemsWrap', needItems);
+  if (needItems && !$('chItems').children.length) addRow('tplCh', 'chItems');
+}
+function madeToggle() { show('madeWrap', radio('made') === 'Yes'); }
+function coToggle() { show('coWrap', radio('courses') === 'Only some'); }
+function budgetToggle() { $('cuBudget').disabled = $('cuNoBudget').checked; if ($('cuNoBudget').checked) $('cuBudget').value = ''; }
+function gOtherToggle(cb) { cb.closest('.inner').querySelector('.gOtherWrap').classList.toggle('on', cb.checked); }
+function actToggle(sel) {
+  var inner = sel.closest('.inner'), a = sel.value;
+  inner.querySelector('.qb').classList.toggle('req', a === 'Change quantity');
+  inner.querySelector('.qa').classList.toggle('req', a === 'Change quantity' || a === 'Add');
+}
+
+function renderGuide(t) {
+  var g = GUIDES[t];
+  $('guide').innerHTML = '<h4>What a complete request looks like</h4><ul>' + g.tips.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul>' +
+    (g.good ? '<div class="ex"><span class="y"><b>Good</b> — “' + g.good + '”</span><span class="n"><b>Weak</b> — “' + g.weak + '”</span></div>' : '');
+}
+
+/* ---------------- repeatable blocks ---------------- */
+function renumber(container) {
+  [].slice.call($(container).querySelectorAll('.item .n')).forEach(function (el, i) { el.textContent = i + 1; });
+}
+function addRow(tpl, container) { $(container).appendChild($(tpl).content.cloneNode(true)); renumber(container); }
+function rm(btn) { var c = btn.closest('.item').parentNode.id; btn.closest('.item').remove(); renumber(c); }
+function copyGuest() {
+  var all = $('guests').querySelectorAll('.item');
+  if (!all.length) return addRow('tplGuest', 'guests');
+  var last = all[all.length - 1];
+  addRow('tplGuest', 'guests');
+  var n = $('guests').querySelectorAll('.item'), fresh = n[n.length - 1];
+  var lastRes = [].slice.call(last.querySelectorAll('.gRes input')), newRes = fresh.querySelectorAll('.gRes input');
+  lastRes.forEach(function (cb, i) { newRes[i].checked = cb.checked; });
+  fresh.querySelector('.gOther').value = last.querySelector('.gOther').value;
+  fresh.querySelector('.gOtherWrap').classList.toggle('on', last.querySelector('.gOtherWrap').classList.contains('on'));
+  fresh.querySelector('.gSev').value = last.querySelector('.gSev').value;
+  fresh.querySelector('.gTable').value = last.querySelector('.gTable').value;
+  fresh.querySelector('.gEntree').value = last.querySelector('.gEntree').value;
+}
+
+/* ---------------- files ---------------- */
+// A raw phone photo is 3-5 MB and base64 adds a third; 1600px at q0.8 lands around 300 KB.
+function shrink(file) {
+  return new Promise(function (resolve, reject) {
+    var img = new Image(), url = URL.createObjectURL(file);
+    img.onload = function () {
+      var max = 1600, w = img.width, h = img.height;
+      if (w > max || h > max) { var r = Math.min(max / w, max / h); w = Math.round(w * r); h = Math.round(h * r); }
+      var c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h); URL.revokeObjectURL(url);
+      resolve({ name: file.name.replace(/\.[^.]+$/, '') + '.jpg', mimeType: 'image/jpeg', data: c.toDataURL('image/jpeg', 0.8).split(',')[1] });
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Could not read ' + file.name + '.')); };
+    img.src = url;
+  });
+}
+function readRaw(file) {
+  return new Promise(function (resolve, reject) {
+    var fr = new FileReader();
+    fr.onload = function () { resolve({ name: file.name, mimeType: file.type || 'application/pdf', data: String(fr.result).split(',')[1] }); };
+    fr.onerror = function () { reject(new Error('Could not read ' + file.name + '.')); };
+    fr.readAsDataURL(file);
+  });
+}
+
+/* ---------------- validate + send ---------------- */
+function collect() {
+  var t = radio('type'), who = requester();
+  if (!who.name || !/@/.test(who.email)) return { err: 'Choose your name (or type your name and email).' };
+  if (!t) return { err: 'Choose what you need: event change, dietary question or custom menu.' };
+  var nb = t === 'custom' && $('notBooked').checked;
+  if (!nb && !/^[0-9]{5}$/.test(val('eventNumber'))) return { err: 'The event number should be the 5-digit invoice number.' };
+  if (!nb && !val('eventDate')) return { err: 'Add the event date.' };
+  if (nb && !val('eventName')) return { err: 'Name the client or event, since it is not booked yet.' };
+  var p = { type: t, requesterName: who.name, requesterEmail: who.email, eventNumber: val('eventNumber'),
+            eventDate: val('eventDate'), eventName: val('eventName'), notBooked: nb, test: TEST };
+
+  if (t === 'change') {
+    var w = checked('#chWhat'), items = [], blocks = [].slice.call($('chItems').querySelectorAll('.item'));
+    if (!w.length) return { err: "Tick what's changing." };
+    var count = w.indexOf('Guest count') !== -1;
+    if (count && (val('countBefore') === '' || val('countAfter') === '')) return { err: 'Give the guest count before and after.' };
+    var needItems = w.indexOf('Item quantities') !== -1 || w.indexOf('Adding items') !== -1 || w.indexOf('Removing items') !== -1 || (count && !$('allScale').checked);
+    for (var i = 0; i < blocks.length; i++) {
+      var b = blocks[i], a = b.querySelector('.cAction').value, it = b.querySelector('.cItem').value.trim(),
+          bf = b.querySelector('.cBefore').value, af = b.querySelector('.cAfter').value, n = i + 1;
+      if (!a && !it && bf === '' && af === '') continue;
+      if (!a) return { err: 'Item ' + n + ': choose change, add or remove.' };
+      if (!it) return { err: 'Item ' + n + ': name the menu item.' };
+      if (a === 'Change quantity' && (bf === '' || af === '')) return { err: 'Item ' + n + ': give the quantity before and after.' };
+      if (a === 'Add' && af === '') return { err: 'Item ' + n + ': how many are being added?' };
+      items.push({ action: a, item: it, before: bf, after: af });
+    }
+    if (needItems && !items.length) return { err: count ? 'Either tick "All menu items scale", or list the items that change.' : 'List the items that change.' };
+    if (w.indexOf('Other') !== -1 && !val('chOther')) return { err: 'Say what else is changing.' };
+    if (!radio('made')) return { err: 'Say whether the change is already made in TPP.' };
+    if (radio('made') === 'Yes' && !val('approvedBy')) return { err: 'Name who in the kitchen approved the change.' };
+    p.change = { what: w, countBefore: val('countBefore'), countAfter: val('countAfter'), allScale: count && $('allScale').checked,
+                 items: items, other: val('chOther'), alreadyMade: radio('made'), approvedBy: val('approvedBy'), notes: val('chNotes') };
+  }
+
+  if (t === 'dietary') {
+    var gs = [].slice.call($('guests').querySelectorAll('.item')), guests = [];
+    if (!gs.length) return { err: 'Add at least one guest.' };
+    for (var j = 0; j < gs.length; j++) {
+      var g = gs[j], k = j + 1, res = [].slice.call(g.querySelectorAll('.gRes input:checked')).map(function (c) { return c.value; });
+      if (!g.querySelector('.gTable').value.trim()) return { err: 'Guest ' + k + ': add the table number (or "buffet").' };
+      if (!g.querySelector('.gName').value.trim()) return { err: 'Guest ' + k + ': add the guest name.' };
+      if (!res.length) return { err: 'Guest ' + k + ': tick at least one restriction.' };
+      if (res.indexOf('Other') !== -1 && !g.querySelector('.gOther').value.trim()) return { err: "Guest " + k + ": say in plain words what they can't have." };
+      if (!g.querySelector('.gSev').value) return { err: 'Guest ' + k + ': say how serious it is.' };
+      guests.push({ table: g.querySelector('.gTable').value.trim(), name: g.querySelector('.gName').value.trim(),
+                    entree: g.querySelector('.gEntree').value.trim(), restrictions: res, other: g.querySelector('.gOther').value.trim(),
+                    severity: g.querySelector('.gSev').value, notes: g.querySelector('.gNotes').value.trim() });
+    }
+    if (!radio('courses')) return { err: 'Say which courses the kitchen should check.' };
+    if (radio('courses') === 'Only some' && !val('coursesText')) return { err: 'Say which courses to check.' };
+    p.dietary = { guests: guests, courses: radio('courses') === 'Only some' ? val('coursesText') : 'All courses' };
+  }
+
+  if (t === 'custom') {
+    var needs = checked('#cuNeeds'), cus = [].slice.call($('cuItems').querySelectorAll('.item')), cItems = [];
+    if (!needs.length) return { err: 'Say what you need from culinary: price, create, approve or ideas.' };
+    if (!val('cuCount')) return { err: 'Add the guest count.' };
+    if (!val('cuStyle')) return { err: 'Choose the service style.' };
+    if (!$('cuNoBudget').checked && !val('cuBudget')) return { err: 'Give a budget per person, or tick "Not set yet".' };
+    for (var m = 0; m < cus.length; m++) {
+      var u = cus[m], q = m + 1, role = u.querySelector('.uRole').value, asked = u.querySelector('.uAsked').value.trim();
+      if (!role && !asked) continue;
+      if (!role) return { err: 'Item ' + q + ': choose its course or role.' };
+      if (!asked) return { err: 'Item ' + q + ': say what the client asked for.' };
+      cItems.push({ role: role, asked: asked, qty: u.querySelector('.uQty').value.trim(), match: u.querySelector('.uMatch').value.trim(),
+                    dietary: u.querySelector('.uDiet').value.trim() });
+    }
+    if (!cItems.length) return { err: 'Add at least one requested item.' };
+    p.custom = { needs: needs, guestCount: val('cuCount'), style: val('cuStyle'), budget: val('cuBudget'), budgetNotSet: $('cuNoBudget').checked,
+                 neededBy: val('cuNeededBy'), context: val('cuContext'), items: cItems };
+  }
+
+  var files = [].slice.call($('files').files || []);
+  if (files.length > 3) return { err: 'Attach 3 files at most.' };
+  for (var f = 0; f < files.length; f++) if (files[f].size > 5 * 1024 * 1024) return { err: files[f].name + ' is over 5 MB.' };
+  return { p: p, files: files };
+}
+
+function submitForm() {
+  var c = collect();
+  if (c.err) return msg('err', c.err);
+  var btn = $('send');
+  btn.disabled = true; btn.textContent = 'Sending…'; msg('ok', 'Sending…');
+  Promise.all(c.files.map(function (f) { return /^image\//.test(f.type) ? shrink(f) : readRaw(f); })).then(function (files) {
+    c.p.files = files;
+    call('submitRequest', c.p, function (res) {
+      btn.disabled = false; btn.textContent = 'Send to the kitchen';
+      if (!res || !res.ok) return msg('err', 'Not sent: ' + ((res && res.error) || 'unknown error') + ' Nothing was saved — fix it and send again.');
+      $('f').style.display = 'none'; $('guide').style.display = 'none'; $('again').style.display = 'block';
+      msg('ok', (res.test
+        ? 'Test sent (ref ' + res.id + '). Test mode: this went only to the form\'s owner, not the kitchen.'
+        : 'Sent — the kitchen has it (ref ' + res.id + '). You are copied on the email, and replies come to you.') + (res.warning ? ' ' + res.warning : ''));
+    }, function (e) {
+      btn.disabled = false; btn.textContent = 'Send to the kitchen';
+      msg('err', 'Could not send: ' + e.message + '. Check your signal and try again — nothing was lost. If it keeps failing, email kitchen@purpleonioncatering.com.');
+    });
+  }).catch(function (e) { btn.disabled = false; btn.textContent = 'Send to the kitchen'; msg('err', e.message); });
+}
+
+/* ---------------- start ---------------- */
+$('testBanner').style.display = TEST ? 'block' : 'none';
+renderGuide('none');
+call('getLists', null, fillLists, listsFailed);
+</script>
+</body>
+</html>
