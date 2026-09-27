@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Kitchen Request — Decide</title>
+<style>
+  :root { --plum:#7B5B7E; --sage:#E2EBDA; --line:#d8d4d0; --ink:#231f20; --warn:#B71C1C; --good:#2E7D32; --muted:#6b6560; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:0 0 3rem; font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:#faf9f8; }
+  header { background:var(--plum); color:#fff; padding:1.1rem 1.2rem; }
+  header h1 { margin:0; font-size:1.15rem; font-weight:600; }
+  header p  { margin:.35rem 0 0; font-size:.85rem; opacity:.9; }
+  .wrap { max-width:760px; margin:0 auto; padding:1.2rem 16px; }
+  .card { border:1px solid var(--line); border-radius:6px; background:#fff; margin:0 0 1.1rem; padding:1rem; }
+  .card h2 { margin:0 0 .6rem; font-size:.8rem; text-transform:uppercase; letter-spacing:.05em; color:var(--plum); }
+  .title { font-size:1.1rem; font-weight:600; margin:0; }
+  .meta { color:var(--muted); font-size:.9rem; margin:.2rem 0 0; }
+  .status { margin:.8rem 0 0; padding:.55rem .75rem; border-radius:5px; background:var(--sage); font-weight:600; }
+  .status small { display:block; font-weight:400; color:var(--muted); }
+  .choices { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:.5rem; }
+  .choices label { display:flex; gap:.5rem; align-items:center; border:1px solid var(--line); border-radius:5px; padding:.65rem .7rem; font-weight:500; cursor:pointer; }
+  .choices label:has(input:checked) { border:2px solid var(--plum); background:#f1eef3; }
+  label.f { display:block; margin:1rem 0 .3rem; font-weight:500; font-size:.92rem; }
+  .req::after { content:" *"; color:var(--warn); }
+  input[type=email], textarea { width:100%; padding:.6rem; border:1px solid var(--line); border-radius:4px; font:inherit; background:#fff; }
+  textarea { min-height:6.5rem; resize:vertical; }
+  .hint { font-size:.8rem; color:var(--muted); margin:.25rem 0 0; }
+  button { font:inherit; border-radius:5px; cursor:pointer; padding:.8rem 1.1rem; border:1px solid var(--plum); }
+  .send { background:var(--plum); color:#fff; font-weight:600; font-size:1.05rem; width:100%; margin-top:1rem; }
+  .send[disabled] { opacity:.55; cursor:progress; }
+  .plain { background:#fff; color:var(--plum); font-weight:600; width:100%; margin-top:.6rem; }
+  #msg { padding:.9rem; border-radius:5px; margin-top:1rem; display:none; font-size:.92rem; }
+  #msg.ok  { display:block; background:#E8F5E9; border:1px solid var(--good); color:#1B5E20; }
+  #msg.err { display:block; background:#FFEBEE; border:1px solid var(--warn); color:#7f1414; }
+  .bad { border:2px solid var(--warn) !important; background:#FFEBEE !important; }
+  .notice { background:#FFF8E1; border:1px solid #E6A700; border-radius:5px; padding:.6rem .8rem; margin:0 0 .8rem; font-size:.9rem; }
+  .test { background:#FFF8E1; border:1px solid #E6A700; border-radius:5px; padding:.5rem .8rem; margin:0 0 1rem; font-size:.85rem; }
+  .scroll { overflow-x:auto; }
+  .scroll table { font-size:.9rem; }
+  .hist { list-style:none; margin:0; padding:0; }
+  .hist li { padding:.55rem 0; border-top:1px solid var(--line); }
+  .hist li:first-child { border-top:none; }
+  .hist .who { font-weight:600; }
+  .hist .when { color:var(--muted); font-size:.85rem; }
+  .hist .note { margin:.3rem 0 0; padding:.3rem .7rem; border-left:3px solid var(--plum); white-space:pre-wrap; }
+  .hide { display:none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Kitchen Request</h1>
+  <p>Decide once. Everyone on the request gets it in the same email thread, with your name and the time.</p>
+</header>
+
+<div class="wrap">
+  <div id="loading" class="card">Loading the request…</div>
+  <div id="app" class="hide">
+    <div id="testBanner" class="test hide">Test mode: decisions are emailed only to the form's owner, not the kitchen or sales.</div>
+
+    <div class="card">
+      <p class="title" id="tTitle"></p>
+      <p class="meta" id="tMeta"></p>
+      <div class="status" id="tStatus"></div>
+    </div>
+
+    <div class="card" id="decide">
+      <h2>Your decision</h2>
+      <div id="handled" class="notice hide"></div>
+      <div class="choices" id="choices"></div>
+      <label class="f" id="noteLabel" for="note">Note</label>
+      <textarea id="note" maxlength="4000"></textarea>
+      <p class="hint" id="noteHint">Goes into the email exactly as you write it.</p>
+      <label class="f req" for="email">Your work email</label>
+      <input type="email" id="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" placeholder="name@purpleonioncatering.com">
+      <p class="hint">So the email says who decided. Remembered on this device.</p>
+      <button type="button" class="send" id="send">Send decision</button>
+      <button type="button" class="plain hide" id="anyway">Send it anyway</button>
+      <div id="msg"></div>
+    </div>
+
+    <div class="card">
+      <h2>The request</h2>
+      <p class="meta" id="tSummary"></p>
+      <div class="scroll" id="tDetails"></div>
+    </div>
+
+    <div class="card">
+      <h2>History</h2>
+      <ul class="hist" id="tHist"></ul>
+    </div>
+  </div>
+</div>
+
+<script>
+var ENDPOINT = 'https://script.google.com/macros/s/AKfycbzp62RcpeZempmUyGH8jq0U2Y8pBzQpwwnHnhYwL2Rn2NFG5p2lmo3oX37ORu7lr8EI/exec';
+var WHO_KEY = 'po-kitchen-who';
+var Q = new URLSearchParams(location.search);
+var ID = Q.get('id') || '', KEY = Q.get('k') || '', PICK = Q.get('a') || '';
+var T = null;
+
+function $(id) { return document.getElementById(id); }
+function text(id, s) { $(id).textContent = s || ''; }
+function show(id, on) { $(id).classList.toggle('hide', !on); }
+function msg(kind, s) { var m = $('msg'); m.className = kind; m.textContent = s; m.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+function post(body) {
+  return fetch(ENDPOINT, { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
+    .then(function (r) { if (!r.ok) throw new Error('the server returned ' + r.status); return r.json(); });
+}
+function picked() { var el = document.querySelector('input[name=act]:checked'); return el ? el.value : ''; }
+function actionOf(k) { return (T.actions || []).filter(function (a) { return a.key === k; })[0]; }
+
+function noteFor() {
+  var a = actionOf(picked());
+  $('noteLabel').textContent = a && a.prompt ? a.prompt : 'Note (optional)';
+  $('noteLabel').classList.toggle('req', !!(a && a.required));
+  $('note').classList.remove('bad');
+}
+
+function render(t) {
+  T = t;
+  show('loading', false); show('app', true);
+  show('testBanner', !!t.test);
+  text('tTitle', t.label + (t.event && t.event !== 'not booked' ? ' · #' + t.event : ' · not booked yet'));
+  text('tMeta', [t.eventName, t.eventDate, 'from ' + t.requester, 'sent ' + t.submitted].filter(Boolean).join(' · '));
+  var st = $('tStatus'); st.textContent = '';
+  st.appendChild(document.createTextNode('Status: ' + t.status + (t.who ? ' — ' + t.who : '')));
+  if (t.closed) { var sm = document.createElement('small'); sm.textContent = t.closed; st.appendChild(sm); }
+  text('tSummary', t.summary);
+  $('tDetails').innerHTML = t.details || '<p class="meta">Details are in the original email.</p>';   // built and escaped server-side
+
+  var open = t.status === 'New' || t.status === 'In progress' || t.status === 'Asked back';
+  show('handled', !open);
+  if (!open) text('handled', 'Already handled: ' + t.status + (t.who ? ' by ' + t.who : '') + (t.closed ? ', ' + t.closed : '') +
+                             '. A new decision sends another email to everyone on the request.');
+
+  var cur = picked() || PICK;
+  var box = $('choices'); box.textContent = '';
+  (t.actions || []).forEach(function (a) {
+    var l = document.createElement('label'), i = document.createElement('input');
+    i.type = 'radio'; i.name = 'act'; i.value = a.key; i.checked = a.key === cur; i.onchange = noteFor;
+    l.appendChild(i); l.appendChild(document.createTextNode(a.button)); box.appendChild(l);
+  });
+  noteFor();
+
+  var h = $('tHist'); h.textContent = '';
+  if (!(t.history || []).length) { var li0 = document.createElement('li'); li0.className = 'when'; li0.textContent = 'No decisions yet.'; h.appendChild(li0); }
+  (t.history || []).forEach(function (x) {
+    var li = document.createElement('li');
+    var w = document.createElement('span'); w.className = 'who'; w.textContent = x.decision + ' — ' + x.by;
+    var d = document.createElement('div'); d.className = 'when'; d.textContent = x.when;
+    li.appendChild(w); li.appendChild(d);
+    if (x.note) { var n = document.createElement('div'); n.className = 'note'; n.textContent = x.note; li.appendChild(n); }
+    h.appendChild(li);
+  });
+}
+
+function send(again) {
+  var action = picked(), a = action && actionOf(action), email = ($('email').value || '').trim().toLowerCase(), note = ($('note').value || '').trim();
+  if (!a) return msg('err', 'Pick a decision.');
+  if (a.required && !note) { $('note').classList.add('bad'); $('note').focus(); return msg('err', 'Add a note: ' + a.prompt); }
+  if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/.test(email)) { $('email').classList.add('bad'); return msg('err', 'Type your work email.'); }
+  var btn = $('send'); btn.disabled = true; btn.textContent = 'Sending…'; show('anyway', false); msg('ok', 'Sending…');
+  post({ op: 'act', id: ID, k: KEY, action: action, note: note, email: email, again: !!again }).then(function (res) {
+    btn.disabled = false; btn.textContent = 'Send decision';
+    if (!res.ok) {
+      if (res.field === 'email') $('email').classList.add('bad');
+      if (res.field === 'note') $('note').classList.add('bad');
+      if (res.code === 'handled') { show('anyway', true); return msg('err', res.error + ' Send another decision anyway?'); }
+      return msg('err', 'Not sent: ' + res.error);
+    }
+    try { localStorage.setItem(WHO_KEY, email); } catch (e) {}
+    $('note').value = '';
+    render(res);
+    msg('ok', 'Sent: ' + res.done + '. ' + (res.test ? 'Test mode — it went only to the form\'s owner.' : 'Everyone on the request got it in the same email thread.') +
+              (res.warning ? ' ' + res.warning : ''));
+  }).catch(function (e) {
+    btn.disabled = false; btn.textContent = 'Send decision';
+    msg('err', 'Could not send: ' + e.message + '. Check your signal and try again — nothing was recorded.');
+  });
+}
+
+$('send').onclick = function () { send(false); };
+$('anyway').onclick = function () { send(true); };
+$('email').oninput = function () { this.classList.remove('bad'); };
+$('note').oninput = function () { this.classList.remove('bad'); };
+try { $('email').value = localStorage.getItem(WHO_KEY) || ''; } catch (e) {}
+
+if (!ID || !KEY) { $('loading').textContent = 'This link is incomplete. Open the request from the kitchen email.'; }
+else post({ op: 'ticket', id: ID, k: KEY }).then(function (t) {
+  if (!t.ok) { $('loading').textContent = t.error; return; }
+  render(t);
+}).catch(function (e) { $('loading').textContent = 'Could not load the request: ' + e.message + '. Refresh to try again.'; });
+</script>
+</body>
+</html>
