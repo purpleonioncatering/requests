@@ -45,6 +45,7 @@
   #msg { padding:.9rem; border-radius:5px; margin-top:1rem; display:none; font-size:.92rem; }
   #msg.ok  { display:block; background:#E8F5E9; border:1px solid var(--good); color:#1B5E20; }
   #msg.err { display:block; background:#FFEBEE; border:1px solid var(--warn); color:#7f1414; }
+  input.bad { border:2px solid var(--warn); background:#FFEBEE; }
   #again { display:none; margin-top:.8rem; }
   aside { font-size:.85rem; }
   @media (min-width:1024px) { aside { position:sticky; top:1rem; } }
@@ -72,12 +73,11 @@
 
     <fieldset id="s-who">
       <legend>The request</legend>
-      <label class="req">Your name</label>
-      <select id="who" onchange="whoToggle()"><option value="">Loading…</option></select>
-      <div class="reveal" id="whoOtherWrap">
-        <label class="req">Name</label><input id="whoName">
-        <label class="req">Email</label><input type="email" id="whoEmail" placeholder="name@purpleonioncatering.com">
-      </div>
+      <label class="req" for="whoName">Your name</label>
+      <input id="whoName" name="name" autocomplete="name" maxlength="80">
+      <label class="req" for="whoEmail">Your email</label>
+      <input type="email" id="whoEmail" name="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" maxlength="120" placeholder="name@purpleonioncatering.com">
+      <p class="hint">Your work email. Replies come here, so it has to be right.</p>
 
       <label class="req">What do you need?</label>
       <div class="choices types">
@@ -305,7 +305,8 @@
 // Google accounts cannot break. On the Apps Script page itself, google.script.run is used instead.
 var ENDPOINT = 'https://script.google.com/macros/s/AKfycbzp62RcpeZempmUyGH8jq0U2Y8pBzQpwwnHnhYwL2Rn2NFG5p2lmo3oX37ORu7lr8EI/exec';
 var TEST = /[?&]test=1\b/.test(location.search);
-var LISTS = { requesters: [], approvers: [] };
+var LISTS = { approvers: [] };
+var WHO_KEY = 'po-request-who';   // name + email remembered on this device only
 
 var GUIDES = {
   none: { tips: ['Pick the request type first — the form asks only what that request needs.',
@@ -345,23 +346,20 @@ function call(fnName, arg, done, fail) {
 function fillLists(res) {
   LISTS = res && res.ok ? res : LISTS;
   if (res && res.live === false) $('testBanner').style.display = 'block';
-  var who = $('who');
-  who.innerHTML = '<option value="">Choose…</option>' + LISTS.requesters.map(function (r, i) {
-    return '<option value="' + i + '">' + r.name + '</option>'; }).join('') + '<option value="other">Someone else</option>';
   $('approvedBy').innerHTML = '<option value="">Choose…</option>' + LISTS.approvers.map(function (a) {
     return '<option>' + a + '</option>'; }).join('');
 }
 function listsFailed() {
-  $('who').innerHTML = '<option value="other" selected>Type your name and email</option>';
-  whoToggle();
   $('approvedBy').outerHTML = '<input id="approvedBy" maxlength="60" placeholder="Name of the kitchen approver">';
 }
-function whoToggle() { show('whoOtherWrap', $('who').value === 'other'); }
-function requester() {
-  var v = $('who').value;
-  if (v === 'other') return { name: val('whoName'), email: val('whoEmail') };
-  var r = /^[0-9]+$/.test(v) ? LISTS.requesters[+v] : null;   // '' must not become index 0
-  return r ? { name: r.name, email: r.email } : { name: '', email: '' };
+function requester() { return { name: val('whoName'), email: val('whoEmail').toLowerCase() }; }
+function rememberWho(w) { try { localStorage.setItem(WHO_KEY, JSON.stringify(w)); } catch (e) {} }
+function recallWho() {
+  try {
+    var w = JSON.parse(localStorage.getItem(WHO_KEY) || 'null');
+    if (w && w.name && !val('whoName')) $('whoName').value = w.name;
+    if (w && w.email && !val('whoEmail')) $('whoEmail').value = w.email;
+  } catch (e) {}
 }
 
 /* ---------------- type branching + reveals ---------------- */
@@ -456,7 +454,8 @@ function readRaw(file) {
 /* ---------------- validate + send ---------------- */
 function collect() {
   var t = radio('type'), who = requester();
-  if (!who.name || !/@/.test(who.email)) return { err: 'Choose your name (or type your name and email).' };
+  if (!who.name) return { err: 'Type your name.' };
+  if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/.test(who.email)) return { err: 'Type your full work email, like name@purpleonioncatering.com.' };
   if (!t) return { err: 'Choose what you need: event change, dietary question or custom menu.' };
   var nb = t === 'custom' && $('notBooked').checked;
   if (!nb && !/^[0-9]{5}$/.test(val('eventNumber'))) return { err: 'The event number should be the 5-digit invoice number.' };
@@ -530,7 +529,7 @@ function collect() {
   var files = [].slice.call($('files').files || []);
   if (files.length > 3) return { err: 'Attach 3 files at most.' };
   for (var f = 0; f < files.length; f++) if (files[f].size > 5 * 1024 * 1024) return { err: files[f].name + ' is over 5 MB.' };
-  return { p: p, files: files };
+  return { p: p, files: files, who: who };
 }
 
 function submitForm() {
@@ -542,7 +541,11 @@ function submitForm() {
     c.p.files = files;
     call('submitRequest', c.p, function (res) {
       btn.disabled = false; btn.textContent = 'Send to the kitchen';
-      if (!res || !res.ok) return msg('err', 'Not sent: ' + ((res && res.error) || 'unknown error') + ' Nothing was saved — fix it and send again.');
+      if (!res || !res.ok) {
+        if (res && res.field === 'email') $('whoEmail').classList.add('bad');
+        return msg('err', 'Not sent: ' + ((res && res.error) || 'unknown error') + ' Nothing was saved — fix it and send again.');
+      }
+      rememberWho(c.who);
       $('f').style.display = 'none'; $('guide').style.display = 'none'; $('again').style.display = 'block';
       msg('ok', (res.test
         ? 'Test sent (ref ' + res.id + '). Test mode: this went only to the form\'s owner, not the kitchen.'
@@ -557,6 +560,8 @@ function submitForm() {
 /* ---------------- start ---------------- */
 $('testBanner').style.display = TEST ? 'block' : 'none';
 renderGuide('none');
+recallWho();
+$('whoEmail').addEventListener('input', function () { this.classList.remove('bad'); });
 call('getLists', null, fillLists, listsFailed);
 </script>
 </body>
